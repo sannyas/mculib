@@ -274,8 +274,8 @@
 #define iopin_inmode( Xn ) 	_iopin_inmode( Xn )
 #define iopin_outhigh( Xn )	_iopin_outhigh( Xn )
 #define iopin_outlow( Xn )	_iopin_outlow( Xn )
-#define iopin_out( Xn, v )	((v)? _iopin_sethigh(Xn) : _iopin_setlow(Xn) )
-#define iopin_input( Xn )		_iopin_get(Xn)
+#define iopin_out( Xn, v )	((v)? _iopin_outhigh(Xn) : _iopin_outlow(Xn) )
+#define iopin_input( Xn )		_iopin_input(Xn)
 #define iopin_pullup( Xn )	_iopin_outhigh( Xn )
 #define iopin_nopullup( Xn )	_iopin_outlow( Xn )
 

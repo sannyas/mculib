@@ -34,7 +34,7 @@
 /**
 * @brief The FILE object used by avr-libc
 */
-extern FILE usart_file;
+extern FILE serial_file;
 
 /**
  * @brief Initialize serial.

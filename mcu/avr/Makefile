@@ -9,7 +9,6 @@
 # source dircetions. Options:
 #	TARGET_NAME	Target name.
 #	C_SOURCES	All C source files.
-#	MODULE_DIRS	Build all C files in this dir.
 #	BUILD_DIR	Output dir.
 #	HEADER_DIRS	The list of header files's dir.
 #	DEFINES		Macro definition.
@@ -18,6 +17,8 @@
 #
 # END
 HEADER_DIRS += $(MCULIB_AVR_PATH)/include
+HEADER_DIRS += $(MCULIB_PATH)/include
+
 
 CC      = avr-gcc
 AR      = avr-ar
@@ -29,17 +30,11 @@ NM      = avr-nm
 #####################################
 # Check files or dirs if these exist.
 #####################################
-ERROR = $(foreach file,$(C_SOURCES),$(if $(wildcard $(file)),,$(file)))
-ifneq ($(ERROR),)
-  $(error $(ERROR) NOT EXIST)
-endif
+#ERROR = $(foreach file,$(C_SOURCES),$(if $(wildcard $(file)),,$(file)))
+#ifneq ($(sort $(ERROR))),)
+#  $(error $(ERROR) NOT EXIST)
+#endif
 
-ifneq ($(MODULE_DIRS),)
-  ERROR = $(foreach dir,$(MODULE_DIRS),$(if $(wildcard $(dir)/*),,$(dir)))
-  ifneq ($(ERROR),)
-    $(error $(ERROR) NOT EXIST OR EMPTY)
-  endif
-endif
 
 ifeq  ($(TARGET_NAME),)
   $(error TARGET_NAME IS EMPTY )
@@ -69,7 +64,6 @@ endif
 # Set search path
 #################
 VPATH	+= :$(BUILD_DIR)
-VPATH	+= $(addprefix :,$(MODULE_DIRS))
 VPATH	+= $(addprefix :,$(sort $(dir $(C_SOURCES))))
 
 
@@ -77,7 +71,6 @@ VPATH	+= $(addprefix :,$(sort $(dir $(C_SOURCES))))
 # All c files
 ##############
 C_FILES := $(notdir $(C_SOURCES))
-C_FILES += $(foreach dir,$(MODULE_DIRS),$(notdir $(wildcard $(dir)/*c)))
 OBJ_FILES := $(C_FILES:.c=.o)
 
 
@@ -101,6 +94,8 @@ CFLAGS += -O$(OPTIMIZE) -mcall-prologues
 CFLAGS += $(addprefix -W,$(WARNINGS))
 CFLAGS += $(addprefix -I,$(HEADER_DIRS))
 CFLAGS += $(addprefix -D,$(DEFINES))
+CFLAGS += -DF_CPU=$(FCPU) -DFCPU=$(FCPU)
+CFLAGS += -DDEVICE=$(DEVICE)
 #CFLAGS += -Wp,-M,-MP,-MT,$(BUILDDIR)/$(*F).o,-MF,$(BUILDDIR)/$(*F).d
 
 LDFLAGS += -Wl,-lm -Wl,--gc-sections,-Map,$(TARGET_NAME).map
@@ -140,7 +135,7 @@ size	: $(TARGET_NAME).elf
 	$(NECHO)echo
 	$(NECHO)$(SIZE) -C --mcu=$(DEVICE) $(TARGET_NAME).elf
 
-.PHONY :clear
+.PHONY :clean
 clean:
 	$(NECHO)echo "Clear ..."
 	rm -f $(BUILD_DIR)/*.a
