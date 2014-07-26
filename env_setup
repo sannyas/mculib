@@ -1,0 +1,2 @@
+export MCULIB_PATH=$(pwd)
+export MCULIB_AVR_PATH=${MCULIB_PATH}/mcu/avr
