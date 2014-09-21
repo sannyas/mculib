@@ -23,10 +23,15 @@
 * 
 */
 
-
 #include <stdio.h>
-#include <debug.h>
-#include <nrf24l01p.h>
+#include "nrf24l01p.h"
+
+
+#ifdef NRF24L01P_DEBUG
+ #define DEBUG_OUTPUT(fmt,args...)	printf( fmt,##args );
+#else
+ #define DEBUG_OUTPUT(fmt,args...)
+#endif
 
 
 /*-------------------------------------------*/
@@ -175,7 +180,8 @@
 /*	Some values of registers
  *-------------------------------------------*/
 
-#define CONFIG_DEFAULT ((1<<EN_CRC)|(0<<CRCO))
+#define CONFIG_DEFAULT ((1<<EN_CRC)|(0<<CRCO) \
+			|(1<<MASK_RX_DR)|(1<<MASK_TX_DS)|(1<<MASK_MAX_RT))
 
 // Address width value.
 #define AW_3			1
@@ -197,10 +203,11 @@
  *-------------------------------------------*/
 #define NRF24L01P_CONF_AUTO_ACK			(1<<0)
 #define NRF24L01P_CONF_STATIC_PAYLOAD_LEN	(1<<1)
-#define NRF24L01P_CONF_CRC			(1<<2)
+//#define NRF24L01P_CONF_CRC			(1<<2)
 
 static struct struct_nrf24l01p_config{
 	uint8_t config;
+	uint8_t others;
 } nrf24l01p_conf;
 
 
@@ -278,22 +285,22 @@ void nrf24l01p_defaultConfig( void ){ // TODO
 	nrf24l01p_singleWriteReg( FEATURE, 0x00 ); 
 	nrf24l01p_singleWriteReg( DYNPD, 0x00 );
 
-	nrf24l01p_conf.config = (
+	nrf24l01p_conf.others = (
 			 NRF24L01P_CONF_AUTO_ACK 
 			|NRF24L01P_CONF_STATIC_PAYLOAD_LEN
-			|NRF24L01P_CONF_CRC
 			);
+	nrf24l01p_conf.config = CONFIG_DEFAULT;
 }
 
-void nrf24l01p_enDynamicPayloadLen( uint8_t enable ){
+void nrf24l01p_enableDynamicPayloadLen( uint8_t enable ){
 	nrf24l01p_singleWriteReg( DYNPD, 0x00 );
 	if( enable ){
 		nrf24l01p_singleWriteReg( FEATURE, (1<<EN_DPL) );
-		nrf24l01p_conf.config &= ~(NRF24L01P_CONF_STATIC_PAYLOAD_LEN);
+		nrf24l01p_conf.others &= ~(NRF24L01P_CONF_STATIC_PAYLOAD_LEN);
 	}
 	else{
 		nrf24l01p_singleWriteReg( FEATURE, 0x00 );
-		nrf24l01p_conf.config |= NRF24L01P_CONF_STATIC_PAYLOAD_LEN;
+		nrf24l01p_conf.others |= NRF24L01P_CONF_STATIC_PAYLOAD_LEN;
 	}
 }
 
@@ -303,19 +310,21 @@ void nrf24l01p_setChannel( uint8_t ch ){
 
 void nrf24l01p_enableCRC( uint8_t en ){
 	if( en ){
-		nrf24l01p_conf.config |= NRF24L01P_CONF_CRC;
+		nrf24l01p_conf.config |= EN_CRC;
 	}
 	else{
-		nrf24l01p_conf.config &= ~NRF24L01P_CONF_CRC;
+		nrf24l01p_conf.config &= ~EN_CRC;
 	}
 }
 
-void nrf24l01p_enAutoACK( uint8_t en ){
+void nrf24l01p_enableAutoACK( uint8_t en ){
 	if( en ){
 		nrf24l01p_singleWriteReg( EN_AA, 0x3f );
+		nrf24l01p_conf.others |= NRF24L01P_CONF_AUTO_ACK;
 	}
 	else{
 		nrf24l01p_singleWriteReg( EN_AA, 0x00 );
+		nrf24l01p_conf.others &= ~NRF24L01P_CONF_AUTO_ACK;
 	}
 }
 
@@ -359,9 +368,53 @@ void nrf24l01p_setRFPower( uint8_t power ){
 	nrf24l01p_singleWriteReg( RF_SETUP, rf_setup );
 }
 
+void nrf24l01p_enableInterupt( uint8_t inte, uint8_t enable ){
+
+	if( inte & NRF24L01P_INT_RX_DR )
+		nrf24l01p_conf.config &= ~(1<<MASK_RX_DR);
+	else
+		nrf24l01p_conf.config |= (1<<MASK_RX_DR);
+
+	if( inte & NRF24L01P_INT_TX_DS )
+		nrf24l01p_conf.config &= ~(1<<MASK_TX_DS);
+	else
+		nrf24l01p_conf.config |= (1<<MASK_TX_DS);
+
+	if( inte & NRF24L01P_INT_MAX_RT )
+		nrf24l01p_conf.config &= ~(1<<MASK_MAX_RT);
+	else
+		nrf24l01p_conf.config |= (1<<MASK_MAX_RT);
+}
+
+uint8_t nrf24l01p_getInterruptType( void ){
+	uint8_t status = nrf24l01p_singleReadReg( STATUS );
+	uint8_t int_type = 0;
+	if( status & (1<<RX_DR) )
+		int_type |= NRF24L01P_INT_RX_DR;
+	if( status & (1<<TX_DS) )
+		int_type |= NRF24L01P_INT_TX_DS;
+	if( status & (1<<MAX_RT) )
+		int_type |= NRF24L01P_INT_MAX_RT;
+	return int_type;
+}
+
+void nrf24l01p_clearInterrupt( uint8_t inte ){
+	uint8_t int_type = 0;
+
+	if( inte & NRF24L01P_INT_RX_DR )
+		int_type |= (1<<RX_DR);
+	if( inte & NRF24L01P_INT_TX_DS )
+		int_type |= (1<<TX_DS);
+	if( inte & NRF24L01P_INT_MAX_RT )
+		int_type |= (1<<MAX_RT);
+	
+	nrf24l01p_singleWriteReg( STATUS, int_type );
+
+}
+
 void nrf24l01p_setTxAddr( uint8_t *addr, uint8_t len ){
 	/* if auto ack is enabled, must enable rx pipe 0. */
-	if( nrf24l01p_conf.config & NRF24L01P_CONF_AUTO_ACK ){
+	if( nrf24l01p_conf.others & NRF24L01P_CONF_AUTO_ACK ){
 		uint8_t en_rxaddr = nrf24l01p_singleReadReg( EN_RXADDR );
 		en_rxaddr |= 0x01;
 		nrf24l01p_singleWriteReg( EN_RXADDR, en_rxaddr );
@@ -369,7 +422,7 @@ void nrf24l01p_setTxAddr( uint8_t *addr, uint8_t len ){
 	}
 
 	/* If dynamic payload len is enabled, DPL_P0 must be set. But why ?*/
-	if( !(nrf24l01p_conf.config & NRF24L01P_CONF_STATIC_PAYLOAD_LEN) ){
+	if( !(nrf24l01p_conf.others & NRF24L01P_CONF_STATIC_PAYLOAD_LEN) ){
 		nrf24l01p_singleWriteReg( DYNPD, 0x01 );
 	}
 
@@ -392,7 +445,7 @@ void nrf24l01p_setRxAddr( uint8_t *addr, uint8_t len, uint8_t pipe, uint8_t payl
 		nrf24l01p_singleWriteReg( EN_RXADDR, val );
 
 		/* Static or dynamic payload len */
-		if( nrf24l01p_conf.config & NRF24L01P_CONF_STATIC_PAYLOAD_LEN ){
+		if( nrf24l01p_conf.others & NRF24L01P_CONF_STATIC_PAYLOAD_LEN ){
 			nrf24l01p_singleWriteReg( RX_PW_P0+pipe, payload_len );
 		}
 		else{
@@ -420,11 +473,11 @@ void nrf24l01p_enterTxMode( void ){
 	nrf24l01p_doCommand( FLUSH_RX, 0, 0, 0 );
 	nrf24l01p_singleWriteReg( STATUS, 0xff );
 
-	config = 0x02;
-	if( nrf24l01p_conf.config & NRF24L01P_CONF_CRC )
-		config |= 0x08;
-
-	nrf24l01p_singleWriteReg( CONFIG, config );
+	//nrf24l01p_singleWriteReg( CONFIG, 0x06 );
+	DEBUG_OUTPUT( "enter TxMode, config=0x%x\n", 
+		nrf24l01p_conf.config|(1<<PWR_UP) );
+	nrf24l01p_singleWriteReg( CONFIG, 
+		nrf24l01p_conf.config|(1<<PWR_UP) );
 	nrf24l01p_chipEnable( 1 );
 }
 
@@ -436,17 +489,17 @@ void nrf24l01p_enterRxMode( void ){
 	nrf24l01p_doCommand( FLUSH_RX, 0, 0, 0 );
 	nrf24l01p_singleWriteReg( STATUS, 0xff );
 
-	config = 0x03;
-	if( nrf24l01p_conf.config & NRF24L01P_CONF_CRC )
-		config |= 0x08;
-
-	nrf24l01p_singleWriteReg( CONFIG, config );
+	//nrf24l01p_singleWriteReg( CONFIG, 0x07 );
+	DEBUG_OUTPUT( "enter RxMode, config=0x%x\n", 
+		nrf24l01p_conf.config|(1<<PRIM_RX)|(1<<PWR_UP));
+	nrf24l01p_singleWriteReg( CONFIG, 
+		nrf24l01p_conf.config|(1<<PRIM_RX)|(1<<PWR_UP) );
 	nrf24l01p_chipEnable( 1 );
 }
 
 void nrf24l01p_standby( void ){
 	nrf24l01p_chipEnable( 0 );
-	nrf24l01p_singleWriteReg( CONFIG, CONFIG_DEFAULT );
+	//nrf24l01p_singleWriteReg( CONFIG, CONFIG_DEFAULT );
 }
 
 void nrf24l01p_powerDown( void ){
@@ -467,32 +520,36 @@ uint8_t	nrf24l01p_transmit( uint8_t *data, uint8_t len ){
 	}
 
 	nrf24l01p_doCommand( W_TX_PAYLOAD, data, 0, len );
-	while( 1 ){
-		status = nrf24l01p_singleReadReg( STATUS );
-		if( status & (1<<TX_DS) ){
-			ret = 1;
-			break;
-		}
-		else if( status & (1<<MAX_RT) ){
-			ret = 0;
-			break;
+	if( nrf24l01p_conf.config & (1<<MASK_TX_DS) ){ // Interrupt disabled
+		while( 1 ){
+			status = nrf24l01p_singleReadReg( STATUS );
+			if( status & (1<<TX_DS) ){
+				ret = 1;
+				break;
+			}
+			else if( status & (1<<MAX_RT) ){
+				DEBUG_OUTPUT( "transmit error: timeout\r\n" );
+				ret = 0;
+				break;
+			}
 		}
 	}
 	
-	nrf24l01p_singleWriteReg( STATUS, 0xff );
+	//nrf24l01p_singleWriteReg( STATUS, 0xff );
 	return ret;
 }
 
 uint8_t nrf24l01p_dataPending( ){
 	uint8_t status;
 	uint8_t fifo_status;
-	uint8_t pipeno = PIPE_NONE;
+	uint8_t pipeno = NRF24L01P_PIPE_NONE;
 
 	status = nrf24l01p_singleReadReg( STATUS );
 	fifo_status = nrf24l01p_singleReadReg( FIFO_STATUS );
 	if( status & (1<<RX_DR) ){
 		nrf24l01p_singleWriteReg( STATUS, 0xff );
 		pipeno = (status&0x0e)>>1;
+		DEBUG_OUTPUT( "jjjj" );
 	}
 	else if( !fifo_rx_empty( fifo_status ) ){
 		nrf24l01p_singleWriteReg( STATUS, 0xff );
@@ -518,6 +575,7 @@ uint8_t nrf24l01p_receive( uint8_t *data, uint8_t maxlen ){
 		len = maxlen;
 	}
 	nrf24l01p_doCommand( R_RX_PAYLOAD, 0, data, len );
+	nrf24l01p_singleWriteReg( STATUS, 0xff );
 	return len;
 
 }
@@ -532,7 +590,7 @@ uint8_t nrf24l01p_receive( uint8_t *data, uint8_t maxlen ){
  * @brief Test SPI read and write functions.
  */
 void nrf24l01p_test_rw( void ){
-	uint8_t data[5] = {0,1,2,3,4};
+	uint8_t data[5] = { 1,2,3,4,5 };
 
 	DEBUG_OUTPUT( "write data (0x%x,0x%x,0x%x,0x%x,0x%x) to TX_ADDR\n",
 			data[0], data[1], data[2], data[3], data[4] );
@@ -555,23 +613,30 @@ void nrf24l01p_test_tx( void ){
 	uint8_t addr_p3[5] = {0xc4,0xc2,0xc2,0xc2,0xc2};
 	uint8_t addr_p4[5] = {0xc5,0xc2,0xc2,0xc2,0xc2};
 	uint8_t addr_p5[5] = {0xc6,0xc2,0xc2,0xc2,0xc2};
-	uint8_t *addrs[6] = { 
-				addr_p0,addr_p1,addr_p2,
-				addr_p3,addr_p4,addr_p5 };
+	uint8_t *addrs[6];
+	uint8_t pipe = 0;
+
+	addrs[0] = addr_p0;
+	addrs[1] = addr_p1;
+	addrs[2] = addr_p2;
+	addrs[3] = addr_p3;
+	addrs[4] = addr_p4;
+	addrs[5] = addr_p5;
 
 	//uint8_t addr_p0[5] = {0x11,0x11,0x11,0x11,0x11};
 	//uint8_t addr_p1[5] = {0x11,0x11,0x11,0x11,0x12};
 
-	uint8_t pipe = 0;
 
 	nrf24l01p_init();
 	nrf24l01p_test_rw();
+	nrf24l01p_setTxAddr( addr_p1, 5 );
+	nrf24l01p_enterTxMode();
 
 	while( 1 ){
-		nrf24l01p_standby();
-		nrf24l01p_setTxAddr( addrs[pipe], 5 );
-		if( ++pipe>5 ) pipe = 0;
-		nrf24l01p_enterTxMode();
+		//nrf24l01p_standby();
+		//nrf24l01p_setTxAddr( addrs[pipe], 5 );
+		//if( ++pipe>5 ) pipe = 0;
+		//nrf24l01p_enterTxMode();
 
 		DEBUG_OUTPUT( "send data: 0x%x,0x%x,0x%x,0x%x\n",
 			data[0],data[1],data[2],data[3] );
@@ -605,60 +670,41 @@ void nrf24l01p_test_rx( void ){
 	nrf24l01p_init();
 	nrf24l01p_test_rw();
 
-	nrf24l01p_setRxAddr( addr_p0, 5, PIPE0, 4 );
-	nrf24l01p_setRxAddr( addr_p1, 5, PIPE1, 4 );
-	nrf24l01p_setRxAddr( addr_p2, 1, PIPE2, 4 );
-	nrf24l01p_setRxAddr( addr_p3, 1, PIPE3, 4 );
-	nrf24l01p_setRxAddr( addr_p4, 1, PIPE4, 4 );
-	nrf24l01p_setRxAddr( addr_p5, 1, PIPE5, 4 );
+	nrf24l01p_setRxAddr( addr_p0, 5, NRF24L01P_PIPE0, 4 );
+	nrf24l01p_setRxAddr( addr_p1, 5, NRF24L01P_PIPE1, 4 );
+	nrf24l01p_setRxAddr( addr_p2, 1, NRF24L01P_PIPE2, 4 );
+	nrf24l01p_setRxAddr( addr_p3, 1, NRF24L01P_PIPE3, 4 );
+	nrf24l01p_setRxAddr( addr_p4, 1, NRF24L01P_PIPE4, 4 );
+	nrf24l01p_setRxAddr( addr_p5, 1, NRF24L01P_PIPE5, 4 );
 
 	nrf24l01p_enterRxMode();
 
 	while( 1 ){
-		if( (pipe=nrf24l01p_dataPending()) != PIPE_NONE ){
+		if( (pipe=nrf24l01p_dataPending()) != NRF24L01P_PIPE_NONE ){
 			len = nrf24l01p_receive( data, 4 );
 			if( len == 0 ){
 				DEBUG_OUTPUT( "error, no data\n" );
-			}else{
+			}else
 				DEBUG_OUTPUT( "pipe %u data: 0x%x,0x%x,0x%x,0x%x\n", 
 					pipe, data[0],data[1],data[2],data[3] );
-			}
 		}
 	}
 }
 
 void nrf24l01p_test_dpl_tx( void ){
 	uint8_t data[6] = { 0x00,0x00,0x00,0x00,0x00,0x00 };
-	uint8_t addr_p0[5] = {0xe7,0xe7,0xe7,0xe7,0xe7};
-	uint8_t addr_p1[5] = {0xc2,0xc2,0xc2,0xc2,0xc2};
-	uint8_t addr_p2[5] = {0xc3,0xc2,0xc2,0xc2,0xc2};
-	uint8_t addr_p3[5] = {0xc4,0xc2,0xc2,0xc2,0xc2};
-	uint8_t addr_p4[5] = {0xc5,0xc2,0xc2,0xc2,0xc2};
-	uint8_t addr_p5[5] = {0xc6,0xc2,0xc2,0xc2,0xc2};
-	uint8_t *addrs[6] = { 
-				addr_p0,addr_p1,addr_p2,
-				addr_p3,addr_p4,addr_p5 };
-
-	//uint8_t addr_p0[5] = {0x11,0x11,0x11,0x11,0x11};
-	//uint8_t addr_p1[5] = {0x11,0x11,0x11,0x11,0x12};
-
 	uint8_t pipe = 5;
+	uint8_t len = 0;
 
 	nrf24l01p_init();
-	nrf24l01p_test_rw();
-	nrf24l01p_enDynamicPayloadLen( 1 );
+	nrf24l01p_enableDynamicPayloadLen( 1 );
 
 	while( 1 ){
-		nrf24l01p_standby();
-		if( ++pipe>5 ) pipe = 0;
-		nrf24l01p_setTxAddr( addrs[pipe], 5 );
-		nrf24l01p_enterTxMode();
-
 		DEBUG_OUTPUT( "send data to pipe %d\n", pipe );
 
-		if( nrf24l01p_transmit( data, pipe+1 ) ){
+		if( ++len == 7 ) len = 1;
+		if( nrf24l01p_transmit( data, len ) ){
 			DEBUG_OUTPUT( "send ok\n" );
-			data[pipe] ++;
 		}
 		else{
 			DEBUG_OUTPUT( "send falure\n" );
@@ -669,35 +715,16 @@ void nrf24l01p_test_dpl_tx( void ){
 
 void nrf24l01p_test_dpl_rx( void ){
 	uint8_t data[10];
-	uint8_t addr_p0[5] = {0xe7,0xe7,0xe7,0xe7,0xe7};
-	uint8_t addr_p1[5] = {0xc2,0xc2,0xc2,0xc2,0xc2};
-	uint8_t addr_p2[1] = {0xc3};
-	uint8_t addr_p3[1] = {0xc4};
-	uint8_t addr_p4[1] = {0xc5};
-	uint8_t addr_p5[1] = {0xc6};
-	
-	
-	//uint8_t addr_p0[5] = {0x11,0x11,0x11,0x11,0x11};
-	//uint8_t addr_p1[5] = {0x11,0x11,0x11,0x11,0x12};
 	uint8_t len;
 	uint8_t pipe;
 	uint8_t i;
 
 	nrf24l01p_init();
-	nrf24l01p_enDynamicPayloadLen( 1 );
-	nrf24l01p_test_rw();
-
-	nrf24l01p_setRxAddr( addr_p0, 5, PIPE0, 0 );
-	nrf24l01p_setRxAddr( addr_p1, 5, PIPE1, 0 );
-	nrf24l01p_setRxAddr( addr_p2, 1, PIPE2, 0 );
-	nrf24l01p_setRxAddr( addr_p3, 1, PIPE3, 0 );
-	nrf24l01p_setRxAddr( addr_p4, 1, PIPE4, 0 );
-	nrf24l01p_setRxAddr( addr_p5, 1, PIPE5, 0 );
-
+	nrf24l01p_enableDynamicPayloadLen( 1 );
 	nrf24l01p_enterRxMode();
 
 	while( 1 ){
-		if( (pipe=nrf24l01p_dataPending()) != PIPE_NONE ){
+		if( (pipe=nrf24l01p_dataPending()) != NRF24L01P_PIPE_NONE ){
 			len = nrf24l01p_receive( data, 10 );
 			if( len == 0 ){
 				DEBUG_OUTPUT( "error, no data\n" );
