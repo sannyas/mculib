@@ -1,0 +1,1 @@
+export MCULIB_PATH=$(pwd)

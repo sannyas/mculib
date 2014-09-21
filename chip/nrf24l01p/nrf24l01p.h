@@ -30,13 +30,13 @@
 
 
 /* PIPE number */
-#define PIPE0			0
-#define PIPE1			1
-#define PIPE2			2
-#define PIPE3			3
-#define PIPE4			4
-#define PIPE5			5
-#define PIPE_NONE		7
+#define NRF24L01P_PIPE0			0
+#define NRF24L01P_PIPE1			1
+#define NRF24L01P_PIPE2			2
+#define NRF24L01P_PIPE3			3
+#define NRF24L01P_PIPE4			4
+#define NRF24L01P_PIPE5			5
+#define NRF24L01P_PIPE_NONE		7
 
 /* Data rate */
 #define NRF24L01P_DATA_RATE_250Kbps	1
@@ -49,53 +49,44 @@
 #define NRF24L01P_RF_POWER_N6dBm	3
 #define NRF24L01P_RF_POWER_0dBm		4
 
-/**
- * @brief operatins
- * @{
- */
+/* Interrupt type */
+#define NRF24L01P_INT_RX_DR		(1<<0)
+#define NRF24L01P_INT_TX_DS		(1<<1)
+#define NRF24L01P_INT_MAX_RT		(1<<2)
 
-/*-----------------------------------------*/
-/*	Initialize
- *-----------------------------------------*/
 void 	nrf24l01p_init( void );
 
-/*-----------------------------------------*/
-/*	Configurations.
- *-----------------------------------------*/
-void	nrf24l01p_enDynamicPayloadLen( uint8_t enable );
+void	nrf24l01p_enableDynamicPayloadLen( uint8_t enable );
 void	nrf24l01p_setChannel( uint8_t ch );
 void	nrf24l01p_enableCRC( uint8_t en );
-void	nrf24l01p_enAutoACK( uint8_t en );
-void	nrf24l01p_setRetransmit( uint8_t delay,uint8_t count );
+void	nrf24l01p_enableAutoACK( uint8_t en );
+void	nrf24l01p_setRetransmit( uint8_t delay, uint8_t count );
 void	nrf24l01p_setDataRate( uint8_t rate );
 void	nrf24l01p_setRFPower( uint8_t power );
+void	nrf24l01p_enableInterupt( uint8_t inte, uint8_t enable );
+uint8_t	nrf24l01p_getInterruptType( void );
+void	nrf24l01p_clearInterrupt( uint8_t inte );
 
-/*-----------------------------------------*/
-/*	Set address.
- *-----------------------------------------*/
+
 void	nrf24l01p_setTxAddr( uint8_t *addr, uint8_t len );
 void	nrf24l01p_setRxAddr( uint8_t *addr, uint8_t len, uint8_t pipe, uint8_t payload_len );
 
-/*-----------------------------------------*/
-/*	Select mode.
- *-----------------------------------------*/
+
 void	nrf24l01p_enterTxMode( void );
 void	nrf24l01p_enterRxMode( void );
 void	nrf24l01p_standby( void );
 void	nrf24l01p_powerDown( void );
 
-/*-----------------------------------------*/
-/*	Send and receive data.
- *-----------------------------------------*/
+
 uint8_t	nrf24l01p_transmit( uint8_t *data, uint8_t len );
 uint8_t nrf24l01p_dataPending( void );
 uint8_t nrf24l01p_receive( uint8_t *data, uint8_t maxlen );
-
-/* @} */
+uint8_t nrf24l01p_fifoIsFull( void );
 
 
 // For test.
 void nrf24l01p_test( void );
+void nrf24l01p_test_rw();
 void nrf24l01p_test_tx();
 void nrf24l01p_test_rx();
 void nrf24l01p_test_dpl_tx();

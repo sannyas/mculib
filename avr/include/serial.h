@@ -1,9 +1,12 @@
 /**
-* @file debug.h
-* @brief For debug
+* @file serial.h
+* @brief 
 * @author Liao MY
-* @date 2014-07-26
+* @date 2014-07-21
 */
+
+#ifndef _USART_HDR_
+#define _USART_HDR_
 
 /* Copyright (C) 
 * 2014 - Liao MY
@@ -23,15 +26,31 @@
 * 
 */
 
-#ifndef DEBUG_H
-#define  DEBUG_H
 
-#ifdef MCULIB_DEBUG
- #define DEBUG_OUTPUT(fmt,args...)	printf( fmt,##args );
-#else
- #define DEBUG_OUTPUT(fmt,args...)
+#include <stdint.h>
+#include <stdio.h>
+
+
+/**
+* @brief The FILE object used by avr-libc
+*/
+extern FILE serial_file;
+
+/**
+ * @brief Initialize serial.
+ */
+void serial_init( void );
+
+/**
+* @brief Output a charactor.
+* @parm data The data to be sent.
+*/
+void serial_putc( uint8_t data );
+
+/**
+* @brief Get a charactor.
+* @ret The received data.
+*/
+uint8_t	serial_getc( void );
+
 #endif
- 
-
-
-#endif /*DEBUG_H*/
